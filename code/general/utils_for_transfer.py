@@ -150,7 +150,8 @@ class VAE(nn.Module):
     def reparameterize(self, mu, logvar,gate):
         std = logvar.mul(0.5).exp_()
         # return torch.normal(mu, std)
-        esp = torch.randn(*mu.size()).cuda()
+        # esp = torch.randn(*mu.size()).cuda()
+        esp = torch.randn(*mu.size())
         z = mu + std * esp*gate
         return z
 

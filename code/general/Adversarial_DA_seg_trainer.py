@@ -33,7 +33,7 @@ LR = 1e-3   # 代表Adam优化器的初始学习率
 ADA_DisLR = 1e-4  # 代表判别器的学习率
 
 WEIGHT_DECAY =1e-5   # 代表Adam优化器的权重衰减系数
-WORKERSNUM = 10   # 代表用于数据加载的进程数
+WORKERSNUM = 0   # 代表用于数据加载的进程数  PS 初始为10，只有0时可以运行
 #TestDir=['/home/wfp/2019TMI/LGE_C0_T2/Original/c0t2lgeCropNorm/LGE192_Validation/','/home/wfp/2019TMI/LGE_C0_T2/Original/c0t2lgeCropNorm/LGE192/']
 prefix = '../experiments/loss_tSNE'   # 返回上一级目录，代表实验结果保存的路径
 dataset_dir = '../Dataset/Patch192'  # 返回上一级目录，代表数据集所在的路径
@@ -83,10 +83,13 @@ def ADA_Train(source_vae_loss_list,source_seg_loss_list,target_vae_loss_list,dis
     A_iter = iter(Train_LoaderA)
     B_iter = iter(Train_LoaderB)
 
+    print(len(A_iter))
+    print(len(B_iter))
+
     i=0
     while i<len(A_iter)-1 and i<len(B_iter)-1:
-        ct,ct_down2,ct_down4,label,label_down2,label_down4 ,info_ct= A_iter.next()
-        mr,mr_down2,mr_down4,info_mr= B_iter.next()
+        ct,ct_down2,ct_down4,label,label_down2,label_down4 ,info_ct= next(A_iter)
+        mr,mr_down2,mr_down4,info_mr= next(B_iter)
 
         # ct= ct.cuda()
         # ct_down2= ct_down2.cuda()  # 下采样，为1/2
@@ -100,18 +103,30 @@ def ADA_Train(source_vae_loss_list,source_seg_loss_list,target_vae_loss_list,dis
 
         # label= label.cuda()
         # 构造一个大小为[batch_size,4,label_size[1],label_size[2]]的全零张量，然后根据label值的位置将其中的值设为1，构造成one-hot编码
-        label_onehot =torch.FloatTensor(label.size(0), 4,label.size(1),label.size(2)).cuda()
+        # label_onehot =torch.FloatTensor(label.size(0), 4,label.size(1),label.size(2)).cuda()
+        label_onehot = torch.FloatTensor(label.size(0), 4, label.size(1), label.size(2))
+        label_onehot.zero_()
+
+        # 根据label值的位置将其中的值设为1，构造成one-hot编码
+        label_onehot.scatter_(1, label.unsqueeze(dim=1), 1)
+
+        # label= label.cuda()
+        # 构造一个大小为[batch_size,4,label_size[1],label_size[2]]的全零张量，然后根据label值的位置将其中的值设为1，构造成one-hot编码
+        # label_onehot =torch.FloatTensor(label.size(0), 4,label.size(1),label.size(2)).cuda()
+        label_onehot = torch.FloatTensor(label.size(0), 4, label.size(1), label.size(2))
         label_onehot.zero_()
         # 根据label值的位置将其中的值设为1，构造成one-hot编码
         label_onehot.scatter_(1, label.unsqueeze(dim=1), 1)
 
         # label_down2= label_down2.cuda()
-        label_down2_onehot =torch.FloatTensor(label_down2.size(0), 4,label_down2.size(1),label_down2.size(2)).cuda()
+        # label_down2_onehot =torch.FloatTensor(label_down2.size(0), 4,label_down2.size(1),label_down2.size(2)).cuda()
+        label_down2_onehot = torch.FloatTensor(label_down2.size(0), 4, label_down2.size(1), label_down2.size(2))
         label_down2_onehot.zero_()
         label_down2_onehot.scatter_(1, label_down2.unsqueeze(dim=1), 1)
 
         # label_down4= label_down4.cuda()
-        label_down4_onehot =torch.FloatTensor(label_down4.size(0), 4,label_down4.size(1),label_down4.size(2)).cuda()
+        # label_down4_onehot =torch.FloatTensor(label_down4.size(0), 4,label_down4.size(1),label_down4.size(2)).cuda()
+        label_down4_onehot = torch.FloatTensor(label_down4.size(0), 4, label_down4.size(1), label_down4.size(2))
         label_down4_onehot.zero_()
         label_down4_onehot.scatter_(1, label_down4.unsqueeze(dim=1), 1)
 
@@ -196,7 +211,7 @@ def ADA_Train(source_vae_loss_list,source_seg_loss_list,target_vae_loss_list,dis
         optim.step()  # 根据计算得到的梯度更新模型的参数。这个函数会调用优化器来执行梯度下降更新参数。
 
         # 每隔20轮打印一次
-        if i % 20 == 0:
+        if i % 1 == 0:
             print('epoch %d , %d th iter; seglr,ADA_totalloss,segloss,distance_loss1,distance_loss2: %.6f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f'\
                   % (epoch, i,lr, balanced_loss.item(),BCE_mr.item(),KLD_mr.item(),BCE_ct.item(),KLD_ct.item(),fusionsegloss_output.item(),segloss_output.item(),segdown2loss_output.item(),segdown4loss_output.item(),distance_loss.item(),distance_down2_loss.item(),distance_down4_loss.item()))
 
@@ -306,12 +321,12 @@ def t_SNE_plot(Train_LoaderA,Train_LoaderB,net,save_dir,mode):
     i = 0
     while i < len(A_iter)-1 and i < len(B_iter)-1:
         # 从两个数据集中获取训练数据
-        ct, ct_down2, ct_down4, label, label_down2, label_down4, info_ct = A_iter.next()
-        mr, mr_down2, mr_down4, info_mr = B_iter.next()
+        ct, ct_down2, ct_down4, label, label_down2, label_down4, info_ct = next(A_iter)
+        mr, mr_down2, mr_down4, info_mr = next(B_iter)
 
         # 将数据传输到GPU上进行计算
-        ct = ct.cuda()
-        mr = mr.cuda()
+        # ct = ct.cuda()
+        # mr = mr.cuda()
 
         # 进行特征提取
         _, _, _, feat_ct, _, _, _, _, _, _, _, _, _, _, _, _, _ = net(ct, 0.0)
@@ -333,10 +348,10 @@ def t_SNE_plot(Train_LoaderA,Train_LoaderB,net,save_dir,mode):
     Y = ['source']*features_A[1:].shape[0]+['target']*features_A[1:].shape[0]
     #Y = ['source'] * 500 + ['target'] * 500
 
-    # 可视化结果
-    sns.scatterplot(X_embedded[:, 0], X_embedded[:, 1], hue=Y, legend='full', palette=palette)
-    plt.savefig(os.path.join(save_dir, '{}.png'.format(mode)))
-    plt.close()
+    # 可视化结果，有问题
+    # sns.scatterplot(X_embedded[:, 0], X_embedded[:, 1], hue=Y, legend='full', palette=palette)
+    # plt.savefig(os.path.join(save_dir, '{}.png'.format(mode)))
+    # plt.close()
 
     # 将t-SNE结果保存到文件中
     np.save(os.path.join(save_dir, '{}_X.npy'.format(mode)), X_embedded)
@@ -427,7 +442,7 @@ def main():
     target_vae_loss_list=[]
     distance_loss_list=[]
 
-    # 调用t_SNE_plot函数对数据进行t - SNE降维，并在图像中标记出源域和目标域的样本点。
+    # 调用t_SNE_plot函数对数据进行t - SNE降维，并在图像中标记出源域和目标域的样本点，函数调用
     print ('start init tsne')
     t_SNE_plot(SourceData_loader, TargetData_loader, vaeencoder, SAVE_DIR, 'init_tsne')
     print ('finish init tsne')
@@ -451,6 +466,7 @@ def main():
                   source_vaedecoder,source_down2_vaedecoder,source_down4_vaedecoder,
                   target_vaedecoder,target_down2_vaedecoder,target_down4_vaedecoder,
                   1.0,DistanceNet,LR,KLDLamda,PredLamda,Alpha,Beta,InfoLamda,epoch,DA_optim, SAVE_DIR)
+
         # 设置为评估模式
         vaeencoder.eval()
         # 进行模型测试，并记录模型性能，调用程序
